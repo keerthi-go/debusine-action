@@ -36,6 +36,8 @@ import os
 import sys
 import yaml
 
+import tenacity
+
 from debusine.client.config import ConfigHandler
 from debusine.client.debusine import Debusine
 from debusine.client.exceptions import (
@@ -281,7 +283,22 @@ def poll_until_complete(
             logger=logger,
         )
     )
-    return client.work_request_get(work_request_id)
+
+    # The REST fetch currently races the WebSocket notification due to a
+    # Debusine bug, so retry until it catches up.
+    # https://salsa.debian.org/freexian-team/debusine/-/work_items/1560
+    @tenacity.retry(
+        retry=tenacity.retry_if_result(
+            lambda wr: wr.result not in _TERMINAL_RESULTS
+            and wr.status in _ACTIVE_STATUSES
+        ),
+        wait=tenacity.wait_fixed(0.5),
+        stop=tenacity.stop_after_delay(20),
+    )
+    def _fetch() -> WorkRequestResponse:
+        return client.work_request_get(work_request_id)
+
+    return _fetch()
 
 
 def main() -> None:
