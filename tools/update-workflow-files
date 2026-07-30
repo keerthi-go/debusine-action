@@ -8,6 +8,11 @@ qualcomm-linux/debusine-action.
 # Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
 # SPDX-License-Identifier: BSD-3-Clause-Clear
 
+# This tool's effect on a repository must match what SPECIFICATION.md
+# describes. Before changing which workflow files this tool deploys or how it
+# decides which branches to manage, update SPECIFICATION.md first, then bring
+# this implementation into sync with it.
+
 import argparse
 import shutil
 import subprocess

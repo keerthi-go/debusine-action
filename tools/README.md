@@ -11,6 +11,12 @@ settings, secrets, environments, and workflow file contents. It covers
 repository state only; this README documents the tooling used to achieve
 and verify that state.
 
+SPECIFICATION.md is the source of truth for these tools. Before changing
+what any tool does to a repository, update SPECIFICATION.md first and
+then bring the implementation into sync with it. The tools in
+combination must have an effect on production repositories that matches
+what SPECIFICATION.md says.
+
 ## Prerequisites
 
 - `gh` CLI tool must be installed and authenticated (`gh auth login`)

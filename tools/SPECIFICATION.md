@@ -6,6 +6,11 @@ to function correctly. It covers repository state only; tooling used to
 achieve or verify that state is not in scope. See README.md for details
 of that.
 
+This specification is the source of truth for the tooling in this
+directory. Any change to what the tools do to a repository must be
+described here first, and the implementation then brought into sync with
+it.
+
 ## Settings
 
 ### GitHub Actions Variables

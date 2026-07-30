@@ -18,6 +18,11 @@ Options:
 # Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
 # SPDX-License-Identifier: BSD-3-Clause-Clear
 
+# This tool's effect on a repository must match what SPECIFICATION.md
+# describes. Before changing what configuration this tool applies or verifies,
+# update SPECIFICATION.md first, then bring this implementation into sync with
+# it.
+
 import json
 import subprocess
 import sys
