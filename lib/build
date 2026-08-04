@@ -103,6 +103,7 @@ cat > "$_parameters_yaml" <<END
 vendor: debian
 sbuild_environment_variant: buildd
 lintian_fail_on_severity: none
+enable_blhc: false
 codename: $SUITE
 suite: $SUITE@debian:suite
 source_artifact: ${artifact_id}@artifacts
