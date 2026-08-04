@@ -88,18 +88,22 @@ debusine-action workflows.
 
 **Usage:**
 ```bash
-./set-repo-secrets <repo-name>
+./set-repo-secrets [--check] <repo-name>
 ```
 
 **Arguments:**
 - `repo-name`: Repository name with pkg- prefix (e.g., `pkg-fastrpc`
   expands to `qualcomm-linux/pkg-fastrpc`)
 
+**Options:**
+- `--check`: Report whether each required secret is present and when it
+  was last updated, without setting anything
+
 **What it sets:**
 
 Secrets defined in SPECIFICATION.md.
 
-The tool will prompt for four secrets:
+Without `--check`, the tool prompts for four secrets:
 
 1. **DEBUSINE_USER** (repository-level): Debusine user (defaults to
    `DebusineGitHubCI@qualcomm.com` if left blank)
@@ -114,13 +118,17 @@ The tool will prompt for four secrets:
 environment exists.
 
 **Limitation:** The GitHub API does not expose secret values, so
-`set-repo-secrets` has no `--check` mode. There is no way to verify that
-secrets are already set or have the correct values without overwriting
-them.
+`--check` mode can only verify that each required secret is *present*
+and report its last-updated date — it cannot confirm that a secret holds
+the correct value without overwriting it.
 
-**Example:**
+**Examples:**
 ```bash
+# Set secrets interactively
 ./set-repo-secrets pkg-fastrpc
+
+# Check which required secrets are present and when they were last updated
+./set-repo-secrets --check pkg-fastrpc
 ```
 
 The tool will interactively prompt for each secret value.
