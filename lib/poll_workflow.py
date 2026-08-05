@@ -56,6 +56,27 @@ _ACTIVE_STATUSES = {"pending", "running"}
 # Timeout (seconds) for establishing the WebSocket connection.
 _CONNECTION_TIMEOUT = 60
 
+# Interval (seconds) between safety polls of the work request status while
+# waiting for a push notification. Terminal transitions that produce no push
+# (for example an aborted workflow) would otherwise never be observed, so a
+# slow poll backs up the push-based wait.
+_SAFETY_POLL_INTERVAL = 30
+
+
+def _terminal_result(wr: WorkRequestResponse) -> str | None:
+    """
+    Return the result string if ``wr`` has reached a terminal state, else None.
+
+    A work request is terminal when it has a recognised result, or when its
+    status is no longer active (for example ``aborted``, which carries no
+    result and produces no completion push).
+    """
+    if wr.result in _TERMINAL_RESULTS:
+        return wr.result
+    if wr.status not in _ACTIVE_STATUSES:
+        return wr.result or "error"
+    return None
+
 
 def _build_argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
@@ -162,6 +183,11 @@ async def _wait_until_complete(
     connection it will deliver any subsequent completion over the socket,
     and the HTTP check catches anything that completed before that point.
 
+    Some terminal transitions produce no completion push (for example an
+    aborted workflow, which moves to a non-active status with no result). A
+    low-frequency safety poll runs alongside the socket to observe those and
+    resolve the wait.
+
     :param client: authenticated Debusine client.
     :param work_request_id: ID of the work request to wait for.
     :param timeout: maximum time to wait for the workflow to complete (seconds),
@@ -177,6 +203,31 @@ async def _wait_until_complete(
         loop = asyncio.get_running_loop()
         connected_event = asyncio.Event()
         result_future: asyncio.Future[str] = loop.create_future()
+
+        async def _safety_poll() -> None:
+            """Slowly poll status to catch terminal transitions with no push."""
+
+            # This is a workaround for
+            # https://salsa.debian.org/freexian-team/debusine/-/work_items/1571
+            # "WebSocket notifications do not notify on workflow abort"
+            while not result_future.done():
+                await asyncio.sleep(_SAFETY_POLL_INTERVAL)
+                try:
+                    wr = client.work_request_get(work_request_id)
+                except (ClientConnectionError, UnexpectedResponseError) as exc:
+                    logger.debug("Safety poll failed, will retry: %s", exc)
+                    continue
+                result = _terminal_result(wr)
+                if result is not None and not result_future.done():
+                    logger.info(
+                        "Work request %d reached terminal status=%s result=%r "
+                        "(observed via safety poll)",
+                        work_request_id,
+                        wr.status,
+                        wr.result or "(none)",
+                    )
+                    result_future.set_result(result)
+                    return
 
         async def _listen() -> None:
             async for payload in sn.messages():
@@ -194,15 +245,10 @@ async def _wait_until_complete(
                         if not result_future.done():
                             result_future.set_exception(exc)
                         return
-                    if wr.result in _TERMINAL_RESULTS:
+                    result = _terminal_result(wr)
+                    if result is not None:
                         if not result_future.done():
-                            result_future.set_result(wr.result)
-                        return
-                    if wr.status not in _ACTIVE_STATUSES:
-                        # Non-active status with no recognised result (e.g.
-                        # aborted): no push will arrive, so resolve now.
-                        if not result_future.done():
-                            result_future.set_result(wr.result or "error")
+                            result_future.set_result(result)
                         return
                     connected_event.set()
                 elif text == "work_request_completed":
@@ -223,6 +269,7 @@ async def _wait_until_complete(
                 )
 
         listen_task = asyncio.create_task(_listen())
+        safety_task: asyncio.Task[None] | None = None
         try:
             # Wait for "connected" (or immediate result if already complete).
             connected_wait_task = asyncio.ensure_future(connected_event.wait())
@@ -241,12 +288,18 @@ async def _wait_until_complete(
             if result_future in done:
                 return result_future.result()
 
-            # Connected; now wait for the workflow result.
+            # Connected; start the safety poll and wait for the result.
+            safety_task = asyncio.create_task(_safety_poll())
             return await asyncio.wait_for(result_future, timeout=timeout)
         finally:
             connected_wait_task.cancel()
             listen_task.cancel()
-            for task in (connected_wait_task, listen_task):
+            if safety_task is not None:
+                safety_task.cancel()
+            tasks = [connected_wait_task, listen_task]
+            if safety_task is not None:
+                tasks.append(safety_task)
+            for task in tasks:
                 try:
                     await task
                 except (asyncio.CancelledError, Exception):
