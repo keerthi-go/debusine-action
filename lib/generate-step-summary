@@ -22,6 +22,9 @@ set -ex
 #   SRCPKG_VERSION
 #   SUITE
 #   BUILD_RESULT (success|failure|cancelled)
+#   signing-key.asc: the signing key for DEBUSINE_WORKSPACE in the current
+#     directory (produced by lib/build; used instead of fetching it here to
+#     avoid the empty-key race). Required when BUILD_RESULT is success.
 
 # Outputs:
 #   $GITHUB_STEP_SUMMARY: summary output for the web UI
@@ -36,7 +39,7 @@ fi
 
 if [ "${BUILD_RESULT}" = "success" ]; then
     target_public_key=$(curl -fsSu "${DEBUSINE_USER}:${DEBUSINE_TOKEN}" "https://deb.${DEBUSINE_HOST}/${DEBUSINE_SCOPE}/${DEBUSINE_TARGET_WORKSPACE}/signing-keys.asc"|sed -e 's/^$/./;s/^/ /')
-    ci_public_key=$(curl -fsSu "${DEBUSINE_USER}:${DEBUSINE_TOKEN}" "https://deb.${DEBUSINE_HOST}/${DEBUSINE_SCOPE}/${DEBUSINE_WORKSPACE}/signing-keys.asc"|sed -e 's/^$/./;s/^/ /')
+    ci_public_key=$(sed -e 's/^$/./;s/^/ /' signing-key.asc)
 fi
 
 cat > "$GITHUB_STEP_SUMMARY" <<END2
