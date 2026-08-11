@@ -33,7 +33,7 @@ from typing import Dict, List, Optional
 DEFAULT_ENVIRONMENT = "production"
 
 # Required reviewers for the Production environment
-REQUIRED_REVIEWERS = ["basak-qcom", "gagath", "lool"]
+REQUIRED_REVIEWERS = ["basak-qcom", "gagath", "lool", "obbardc", "slyon"]
 
 # Required reviewers for the Ubuntu Production environment
 REQUIRED_REVIEWERS_UBUNTU_PRODUCTION = ["keerthi-go", "abickett", "bjordiscollaku"]

@@ -47,6 +47,8 @@ The following users must all be configured as required reviewers:
 - `basak-qcom`
 - `gagath`
 - `lool`
+- `obbardc`
+- `slyon`
 
 #### Administrator Bypass
 
