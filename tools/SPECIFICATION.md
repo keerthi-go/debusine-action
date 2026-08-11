@@ -42,7 +42,8 @@ following configuration:
 
 #### Required Reviewers
 
-The following users must all be configured as required reviewers:
+The following users must all be configured as required reviewers
+(keep this list sorted alphabetically):
 
 - `basak-qcom`
 - `gagath`
@@ -73,11 +74,12 @@ model.
 
 #### Required Reviewers
 
-The following users must all be configured as required reviewers:
+The following users must all be configured as required reviewers
+(keep this list sorted alphabetically):
 
-- `keerthi-go`
 - `abickett`
 - `bjordiscollaku`
+- `keerthi-go`
 
 #### Administrator Bypass
 

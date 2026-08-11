@@ -32,11 +32,13 @@ from typing import Dict, List, Optional
 # Default environment - change this constant to swap the default
 DEFAULT_ENVIRONMENT = "production"
 
-# Required reviewers for the Production environment
+# Required reviewers for the Production environment (keep sorted
+# alphabetically)
 REQUIRED_REVIEWERS = ["basak-qcom", "gagath", "lool", "obbardc", "slyon"]
 
-# Required reviewers for the Ubuntu Production environment
-REQUIRED_REVIEWERS_UBUNTU_PRODUCTION = ["keerthi-go", "abickett", "bjordiscollaku"]
+# Required reviewers for the Ubuntu Production environment (keep sorted
+# alphabetically)
+REQUIRED_REVIEWERS_UBUNTU_PRODUCTION = ["abickett", "bjordiscollaku", "keerthi-go"]
 
 # Environments that require a required-reviewers protection rule, mapped to
 # the reviewers each one must have. This is the single source of truth for
