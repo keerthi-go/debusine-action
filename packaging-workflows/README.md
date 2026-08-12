@@ -11,3 +11,8 @@ repository. Currently this process is manual. We
 [agreed](https://github.com/qualcomm-linux/debusine-action/pull/15) that once
 landed into this repository through a peer-reviewed PR, no further PRs are
 required to update the corresponding workflow files in the pkg-* repositories.
+
+To temporarily disable Debusine workflow execution for a repository without
+removing these files, set the repository Actions variable
+`DEBUSINE_WORKFLOWS_DISABLED` to `true`. Delete the variable, or set it to any
+other value, to re-enable the workflows.
