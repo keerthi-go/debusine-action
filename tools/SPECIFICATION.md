@@ -26,6 +26,17 @@ The following repository-level Actions variable must **not** be set:
 
 - `DEBUSINE_PARENT_WORKSPACE`
 
+The following repository-level Actions variable may be set temporarily to
+suspend Debusine workflow execution without removing workflow files,
+secrets, or environments:
+
+| Variable                       | Value  | Effect                                      |
+|--------------------------------|--------|---------------------------------------------|
+| `DEBUSINE_WORKFLOWS_DISABLED`  | `true` | Skip Debusine CI, daily, and release runs   |
+
+If `DEBUSINE_WORKFLOWS_DISABLED` is unset or has any value other than `true`,
+Debusine workflows are enabled.
+
 ### GitHub Actions Secrets
 
 The following repository-level Actions secrets must be set:

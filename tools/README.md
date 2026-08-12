@@ -277,6 +277,32 @@ Or run the steps individually:
    ./update-workflow-files pkg-fastrpc
    ```
 
+## Temporarily Disabling Debusine Workflows
+
+To suspend Debusine workflow execution for a repository without removing
+workflow files, secrets, or environments, set the repository Actions variable
+`DEBUSINE_WORKFLOWS_DISABLED` to `true`:
+
+```bash
+gh variable set DEBUSINE_WORKFLOWS_DISABLED \
+  --repo qualcomm-linux/pkg-fastrpc \
+  --body true
+```
+
+While this variable is set to `true`, scheduled, PR, and release Debusine runs
+are skipped. PRs receive a successful `Debusine CI` status whose description
+states that Debusine CI is disabled for the repository.
+
+To re-enable Debusine workflows, delete the variable:
+
+```bash
+gh variable delete DEBUSINE_WORKFLOWS_DISABLED \
+  --repo qualcomm-linux/pkg-fastrpc
+```
+
+Leaving the variable unset, or setting it to any value other than `true`,
+enables the Debusine workflows.
+
 ## Troubleshooting
 
 **"gh is not authenticated"**
