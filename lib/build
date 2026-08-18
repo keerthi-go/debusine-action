@@ -106,6 +106,8 @@ vendor: debian
 sbuild_environment_variant: buildd
 lintian_fail_on_severity: none
 enable_blhc: false
+enable_autopkgtest: false
+enable_piuparts: false
 codename: $SUITE
 suite: $SUITE@debian:suite
 source_artifact: ${artifact_id}@artifacts
