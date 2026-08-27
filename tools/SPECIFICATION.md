@@ -46,6 +46,16 @@ The following repository-level Actions secrets must be set:
 | `DEBUSINE_USER`  | Debusine user identity            |
 | `DEBUSINE_TOKEN` | Debusine API authentication token |
 
+`debusine.yml` also accepts an optional `DISTRO_ARTIFACTS_TOKEN` reusable
+workflow secret, used by `lib/persist-provenance` to push release
+provenance into `qcom-distro-artifacts`. It is not a repository-level
+secret managed by this tooling: repos that want provenance persistence
+pass it through from the already-provisioned org secret
+`DEB_PKG_BOT_CI_TOKEN` in their `debusine-release.yml`
+(`DISTRO_ARTIFACTS_TOKEN: ${{ secrets.DEB_PKG_BOT_CI_TOKEN }}`), matching
+the reference copy in `packaging-workflows/debusine-release.yml`. Repos
+that omit it simply skip provenance persistence.
+
 ### GitHub Environment: Production
 
 A GitHub Actions environment named `Production` must exist with the

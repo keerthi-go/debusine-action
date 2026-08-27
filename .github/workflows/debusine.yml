@@ -43,6 +43,8 @@ on:
         required: true
       DEBUSINE_RELEASE_TOKEN:
         required: true
+      DISTRO_ARTIFACTS_TOKEN:
+        required: false
 
 # Release runs for the same branch share a group (preventing concurrent
 # releases), while non-release runs get unique groups (allowing concurrent
@@ -283,6 +285,8 @@ jobs:
           # https://github.com/actions/upload-artifact/issues/176
           path: srcpkg
           ref: ${{ needs.resolve.outputs.source_ref }}
+          fetch-depth: 0
+          fetch-tags: true
       - uses: actions/checkout@v6
         with:
           repository: qualcomm-linux/debusine-action
@@ -307,4 +311,33 @@ jobs:
         run: |
           set -ex
           debusine-action/lib/release
+
+      - name: Generate provenance
+        env:
+          PKG_REPO: ${{ github.repository }}
+          PKG_REPO_BRANCH: ${{ inputs.target_branch }}
+          SRCPKG_NAME: ${{ needs.source-package.outputs.srcpkg_name }}
+          SRCPKG_VERSION: ${{ needs.source-package.outputs.srcpkg_version }}
+        run: |
+          set -ex
+          debusine-action/lib/generate-provenance srcpkg release.bundle build/provenance.json
+
+      - name: Upload provenance artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-provenance-${{ inputs.job_index }}
+          path: build/provenance.json
+          if-no-files-found: error
+
+      - name: Persist provenance to qcom-distro-artifacts
+        env:
+          DISTRO_ARTIFACTS_TOKEN: ${{ secrets.DISTRO_ARTIFACTS_TOKEN }}
+          SUITE: ${{ needs.resolve.outputs.suite }}
+        run: |
+          set -ex
+          debusine-action/lib/persist-provenance build/provenance.json
+
+      - name: Push release git state
+        run: |
+          set -ex
           debusine-action/lib/push-release

@@ -17,7 +17,9 @@ This action wraps three sub-actions into a single configurable step:
 The repository also contains higher-level reusable packaging workflows. Those
 workflows generate source packages in suite-specific GHCR builder images and
 run Debusine client and release steps in the `trixie` builder image published
-from this repository.
+from this repository. The release step also generates and uploads a
+`provenance.json` artifact recording the upstream and packaging-repo lineage
+of the release.
 
 ---
 

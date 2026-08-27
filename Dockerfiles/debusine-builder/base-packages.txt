@@ -5,6 +5,7 @@ devscripts
 dpkg-dev
 git
 git-buildpackage
+jq
 pristine-tar
 python3-yaml
 yq

@@ -1,0 +1,243 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+# SPDX-License-Identifier: BSD-3-Clause-Clear
+
+# Generate the release provenance.json for a Debusine package release.
+#
+# The upstream source for a package is tracked by one of three mechanisms,
+# checked in this order:
+#   1. upstream.conf               - prebuilt binary fetched from Artifactory
+#   2. debian/watch (qartifactory) - prebuilt binary fetched via uscan/Artifactory
+#   3. upstream/* git tags         - source package built from a git-forge upstream
+#
+# Unlike a from-scratch tag search, the packaging repo tag/commit are read
+# directly from release.bundle (created by lib/prepare-release), since that
+# is the exact tag/commit this release published. This script merges
+# release.bundle into package-repo-dir itself (the same fetch+merge
+# lib/push-release performs later; repeating it there is a harmless no-op)
+# so that pkg_repo_commit reflects the actual release commit rather than the
+# pre-release HEAD. For mechanism 3, the upstream repository URL is read
+# from debian/copyright's Source: field (falling back to debian/control's
+# Homepage:) rather than a caller-supplied env var, and normalized to a bare
+# "org/repo" form for github.com URLs to match qcom-build-utils' convention.
+
+# Dependencies:
+#   git jq
+
+# Inputs:
+#   $1: package-repo-dir  - checked out source tree, at the pre-release
+#       commit (i.e. run after lib/release, before lib/push-release; this
+#       script merges the release commit from release.bundle itself)
+#   $2: release-bundle-path - the release.bundle produced by lib/prepare-release
+#   $3: output-json-path
+#   Required env vars: PKG_REPO, PKG_REPO_BRANCH, SRCPKG_NAME, SRCPKG_VERSION
+
+# Outputs:
+#   $3: provenance.json
+
+usage() {
+  echo "Usage: $0 <package-repo-dir> <release-bundle-path> <output-json-path>" >&2
+  exit 2
+}
+
+require_env() {
+  local name="$1"
+  if [[ -z "${!name:-}" ]]; then
+    echo "::error::$name is required" >&2
+    exit 1
+  fi
+}
+
+merge_release_bundle() {
+  local bundle_path="$1"
+  local release_ref
+  release_ref=$(git bundle list-heads "$bundle_path" | awk '{print $2}')
+  if [[ -z "$release_ref" ]]; then
+    echo "::error::Could not determine release ref from ${bundle_path}" >&2
+    exit 1
+  fi
+  # lib/push-release performs this same fetch+merge later; doing it here too
+  # (before that point) is a harmless no-op for it, and lets us read the
+  # release commit/tag from an already-merged HEAD.
+  git fetch "$bundle_path" "${release_ref}:${release_ref}"
+  git merge --ff "$release_ref"
+  PACKAGE_REPO_TAG="${release_ref#refs/tags/}"
+  echo "Using package repo tag from release bundle: ${PACKAGE_REPO_TAG}"
+}
+
+resolve_upstream_repo() {
+  local upstream_repo=""
+  if [[ -f "debian/copyright" ]]; then
+    upstream_repo="$(grep -m1 -E '^Source:' debian/copyright | sed -e 's/^Source:[[:space:]]*//' -e 's/[[:space:]]*$//' || true)"
+  fi
+  if [[ -z "$upstream_repo" ]] && [[ -f "debian/control" ]]; then
+    upstream_repo="$(grep -m1 -E '^Homepage:' debian/control | sed -e 's/^Homepage:[[:space:]]*//' -e 's/[[:space:]]*$//' || true)"
+  fi
+  if [[ -z "$upstream_repo" ]]; then
+    echo "::error::Could not derive upstream repo from debian/copyright (Source:) or debian/control (Homepage:)" >&2
+    exit 1
+  fi
+  normalize_upstream_repo "$upstream_repo"
+}
+
+# Match qcom-build-utils' UPSTREAM_REPO_GITHUB_NAME convention (bare
+# "org/repo", no host/scheme/.git suffix) when the derived URL is a GitHub
+# repo; other forges are left as-is since there's no established convention
+# for them.
+normalize_upstream_repo() {
+  local repo="$1"
+  repo="${repo%.git}"
+  case "$repo" in
+    https://github.com/*|http://github.com/*) repo="${repo#*github.com/}" ;;
+    git@github.com:*) repo="${repo#git@github.com:}" ;;
+  esac
+  echo "${repo%/}"
+}
+
+write_provenance_prebuilt_binary_conf() {
+  local output_path="$1" pkg_source="$2" all_pkgs_json="$3"
+
+  echo "ℹ️ upstream.conf found — generating provenance for prebuilt binary package"
+  # shellcheck source=/dev/null
+  source "upstream.conf"
+
+  cat > "$output_path" << EOF2
+{
+  "$pkg_source" : {
+    "source_pkg_version": "${PKG_VERSION}",
+
+    "upstream_type": "prebuilt_binary",
+    "upstream_repo": "$ARTIFACTORY",
+    "upstream_repo_tag": "$TAG",
+    "src_distro": "$DISTRO",
+    "src_package_name": "$PACKAGE_NAME",
+
+    "pkg_repo": "${PKG_REPO}",
+    "pkg_repo_tag": "$PACKAGE_REPO_TAG",
+    "pkg_repo_commit": "$PACKAGE_REPO_COMMIT",
+    "pkg_repo_branch": "${PKG_REPO_BRANCH}",
+
+    "binary_pkgs": $all_pkgs_json
+  }
+}
+EOF2
+}
+
+write_provenance_prebuilt_binary_watch() {
+  local output_path="$1" pkg_source="$2" all_pkgs_json="$3"
+
+  echo "ℹ️ debian/watch (Artifactory) found — generating provenance for uscan-fetched prebuilt binary package"
+
+  # Same derivation build/generate-source-package uses: strip the debian
+  # revision suffix from the source package version.
+  local upstream_ver watch_url
+  upstream_ver="$(echo "$PKG_VERSION" | sed 's/-[^-]*$//')"
+
+  # Traceability only: capture the Artifactory URL pattern from debian/watch
+  # itself, since there's no upstream.conf/ARTIFACTORY var for this mechanism.
+  watch_url="$(grep -E '^\s*https://' debian/watch | head -1 | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]\\]*$//')"
+
+  cat > "$output_path" << EOF2
+{
+  "$pkg_source" : {
+    "source_pkg_version": "${PKG_VERSION}",
+
+    "upstream_type": "prebuilt_binary_watch",
+    "upstream_repo": "$watch_url",
+    "upstream_repo_tag": "$upstream_ver",
+
+    "pkg_repo": "${PKG_REPO}",
+    "pkg_repo_tag": "$PACKAGE_REPO_TAG",
+    "pkg_repo_commit": "$PACKAGE_REPO_COMMIT",
+    "pkg_repo_branch": "${PKG_REPO_BRANCH}",
+
+    "binary_pkgs": $all_pkgs_json
+  }
+}
+EOF2
+}
+
+write_provenance_source() {
+  local output_path="$1" pkg_source="$2" all_pkgs_json="$3"
+
+  echo "ℹ️ No upstream.conf — generating provenance for source package"
+
+  local upstream_repo nearest_upstream_branch_tag nearest_upstream_commit nearest_upstream_tag
+  upstream_repo="$(resolve_upstream_repo)"
+
+  nearest_upstream_branch_tag=$(git describe --tags --match 'upstream/*' --abbrev=0)
+  nearest_upstream_commit=$(git rev-list -n 1 "$nearest_upstream_branch_tag")
+  nearest_upstream_tag="${nearest_upstream_branch_tag#upstream/}"
+
+  if [[ "$nearest_upstream_tag" == "$nearest_upstream_branch_tag" ]]; then
+    echo "::warning::Unexpected upstream tag format '${nearest_upstream_branch_tag}'; using it as-is"
+  else
+    echo "::notice::Using upstream tag '${nearest_upstream_tag}' derived from '${nearest_upstream_branch_tag}'"
+  fi
+
+  cat > "$output_path" << EOF2
+{
+  "$pkg_source" : {
+    "source_pkg_version": "${PKG_VERSION}",
+
+    "upstream_type": "source",
+    "upstream_repo": "${upstream_repo}",
+    "upstream_repo_tag": "$nearest_upstream_tag",
+    "upstream_repo_commit": "$nearest_upstream_commit",
+
+    "pkg_repo": "${PKG_REPO}",
+    "pkg_repo_tag": "$PACKAGE_REPO_TAG",
+    "pkg_repo_commit": "$PACKAGE_REPO_COMMIT",
+    "pkg_repo_branch": "${PKG_REPO_BRANCH}",
+    "pkg_repo_upstream_tag": "$nearest_upstream_branch_tag",
+
+    "binary_pkgs": $all_pkgs_json
+  }
+}
+EOF2
+}
+
+main() {
+  if (( $# != 3 )); then
+    usage
+  fi
+
+  local package_repo_dir="$1" release_bundle_path="$2" output_path="$3"
+
+  require_env PKG_REPO
+  require_env PKG_REPO_BRANCH
+  require_env SRCPKG_NAME
+  require_env SRCPKG_VERSION
+  PKG_VERSION="$SRCPKG_VERSION"
+
+  local output_dir
+  output_dir="$(dirname "$output_path")"
+  mkdir -p "$output_dir"
+  output_path="$(cd "$output_dir" && pwd)/$(basename "$output_path")"
+  release_bundle_path="$(cd "$(dirname "$release_bundle_path")" && pwd)/$(basename "$release_bundle_path")"
+
+  cd "$package_repo_dir"
+
+  local pkg_source all_pkgs all_pkgs_json
+  pkg_source="${SRCPKG_NAME}"
+  all_pkgs=$(awk '/^Package:/{print $2}' debian/control | sort -u)
+  all_pkgs_json=$(printf '%s\n' "$all_pkgs" | jq -c -R -s 'split("\n") | map(select(length>0))')
+
+  merge_release_bundle "$release_bundle_path"
+  PACKAGE_REPO_COMMIT="$(git rev-parse HEAD)"
+
+  if [[ -f "upstream.conf" ]]; then
+    write_provenance_prebuilt_binary_conf "$output_path" "$pkg_source" "$all_pkgs_json"
+  elif [[ -f "debian/watch" ]] && grep -q "qartifactory" "debian/watch"; then
+    write_provenance_prebuilt_binary_watch "$output_path" "$pkg_source" "$all_pkgs_json"
+  else
+    write_provenance_source "$output_path" "$pkg_source" "$all_pkgs_json"
+  fi
+
+  echo "Content of the provenance file:"
+  sed -e 's/^/\x1b[34m/' -e 's/$/\x1b[0m/' "$output_path"
+}
+
+main "$@"

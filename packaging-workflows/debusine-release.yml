@@ -36,3 +36,4 @@ jobs:
       DEBUSINE_USER: ${{ secrets.DEBUSINE_USER }}
       DEBUSINE_TOKEN: ${{ secrets.DEBUSINE_TOKEN }}
       DEBUSINE_RELEASE_TOKEN: ${{ secrets.DEBUSINE_RELEASE_TOKEN }}
+      DISTRO_ARTIFACTS_TOKEN: ${{ secrets.DEB_PKG_BOT_CI_TOKEN }}

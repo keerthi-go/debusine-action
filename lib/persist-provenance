@@ -1,0 +1,108 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+# SPDX-License-Identifier: BSD-3-Clause-Clear
+
+# Persist a release's provenance.json (produced by lib/generate-provenance)
+# into the qcom-distro-artifacts repository, merging it into the existing
+# <suite>/provenance.json there. This mirrors qcom-build-utils' "Persist
+# metadata to qcom-distro-artifacts" step for the Ubuntu release path.
+#
+# DISTRO_ARTIFACTS_TOKEN is optional: callers that haven't opted into
+# provenance persistence (by wiring the secret through) simply skip this
+# step, so this is a no-op rather than a failure.
+
+# Dependencies:
+#   git jq
+
+# Inputs:
+#   $1: provenance-json-path - the provenance.json produced by
+#       lib/generate-provenance
+#   Env vars:
+#     DISTRO_ARTIFACTS_TOKEN - PAT-style token with push access to
+#       qualcomm-linux/qcom-distro-artifacts. If unset/empty, this script
+#       skips persistence entirely.
+#     SUITE - Debian suite (e.g. trixie, forky); used as the top-level
+#       directory in qcom-distro-artifacts.
+
+# Outputs:
+#   A commit pushed to qualcomm-linux/qcom-distro-artifacts@main containing
+#   the merged "$SUITE/provenance.json".
+
+usage() {
+  echo "Usage: $0 <provenance-json-path>" >&2
+  exit 2
+}
+
+workdir=""
+cleanup() {
+  if [[ -n "$workdir" ]]; then
+    rm -rf "$workdir"
+  fi
+}
+trap cleanup EXIT
+
+main() {
+  if (( $# != 1 )); then
+    usage
+  fi
+
+  local provenance_path="$1"
+
+  if [[ -z "${DISTRO_ARTIFACTS_TOKEN:-}" ]]; then
+    echo "::notice::DISTRO_ARTIFACTS_TOKEN not set, skipping provenance persistence"
+    exit 0
+  fi
+
+  if [[ -z "${SUITE:-}" ]]; then
+    echo "::error::SUITE is required" >&2
+    exit 1
+  fi
+
+  provenance_path="$(cd "$(dirname "$provenance_path")" && pwd)/$(basename "$provenance_path")"
+
+  workdir=$(mktemp -d)
+
+  git clone "https://x-access-token:${DISTRO_ARTIFACTS_TOKEN}@github.com/qualcomm-linux/qcom-distro-artifacts.git" "$workdir"
+  cd "$workdir"
+  git config user.name "Debusine Action Bot"
+  git config user.email "noreply@bot.invalid"
+
+  mkdir -p "$SUITE"
+  local suite_provenance="$SUITE/provenance.json"
+  if [[ -f "$suite_provenance" ]]; then
+    local merged
+    merged=$(mktemp)
+    jq -s --indent 2 '.[0] * .[1]' "$suite_provenance" "$provenance_path" > "$merged"
+    mv "$merged" "$suite_provenance"
+  else
+    cp "$provenance_path" "$suite_provenance"
+  fi
+
+  git add "$suite_provenance"
+  if git diff --cached --quiet; then
+    echo "Provenance unchanged, nothing to commit"
+    exit 0
+  fi
+
+  local source_pkg version
+  source_pkg=$(jq -r 'keys[0]' "$provenance_path")
+  version=$(jq -r '.[keys[0]].source_pkg_version' "$provenance_path")
+  git commit -m "provenance: update ${source_pkg} ${version} for ${SUITE}"
+
+  local attempt
+  for attempt in 1 2 3; do
+    if git push origin main; then
+      break
+    fi
+    if [[ "$attempt" == 3 ]]; then
+      echo "::error::Failed to push provenance to qcom-distro-artifacts after 3 attempts" >&2
+      exit 1
+    fi
+    echo "Push attempt ${attempt} failed, rebasing and retrying..."
+    git pull --rebase origin main
+  done
+}
+
+main "$@"

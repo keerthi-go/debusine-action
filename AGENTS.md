@@ -43,6 +43,17 @@ the current `pkg-*` Debusine workflow model.
   builder image.
 - Source package artifacts are staged via a named `source-package/` directory
   artifact and restored in the build job before calling `lib/build`.
+- The `release` job also generates a `provenance.json` (via
+  `lib/generate-provenance`) recording upstream and packaging-repo lineage,
+  uploaded as the `release-provenance-<job_index>` artifact. This mirrors
+  `qcom-build-utils`'s provenance output shape but derives every field from
+  data already in the job (the `srcpkg` checkout and `release.bundle`) — no
+  new secrets or repository variables.
+- The `release` job then persists that `provenance.json` into
+  `qcom-distro-artifacts` (via `lib/persist-provenance`), merging it into
+  `<suite>/provenance.json` there, matching `qcom-build-utils`'s Ubuntu-side
+  persistence. This uses the optional `DISTRO_ARTIFACTS_TOKEN` reusable
+  workflow secret; callers that don't pass it get a clean no-op skip.
 - Branch-to-suite resolution is explicit in `resolve`:
   - `qli/debian/latest`, `qli-staging/debian/latest`, or `qcom/debian/latest` (transitional) -> `forky`
   - `qli/debian/trixie`, `qli-staging/debian/trixie`, or `qcom/debian/trixie` (transitional) -> `trixie`
@@ -224,4 +235,6 @@ Known pattern:
 - `lib/generate-step-summary`
 - `lib/prepare-release`
 - `lib/release`
+- `lib/generate-provenance`
+- `lib/persist-provenance`
 - `lib/push-release`
